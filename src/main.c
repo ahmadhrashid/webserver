@@ -8,6 +8,7 @@
 #include "queue.h"
 #include <signal.h>
 #include "globals.h"
+#include "logger.h"
 
 volatile sig_atomic_t stop = 0;
 
@@ -35,6 +36,7 @@ int main()
         perror("Failed to ignore SIGPIPE");
         exit(EXIT_FAILURE);
     }
+    logger_init("access.log", "error.log");
     queue_init(16);
     threadpool_start();
 
@@ -85,6 +87,7 @@ int main()
     printf("Shutting down server...\n");
     // stop threads & clean up
     threadpool_stop();
+    logger_close();
     close(server_fd);
     queue_destroy();
     printf("Server shutdown complete.\n");
