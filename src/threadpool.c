@@ -1,22 +1,20 @@
 #include <pthread.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
-#include <string.h>
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <sys/socket.h> // for SO_RCVTIMEO
-#include <sys/time.h>   // for struct timeval
 #include "queue.h"
 #include "globals.h"
 #include "logger.h"
-#include <arpa/inet.h>  // for inet_ntoa
+#include <arpa/inet.h>  
+#include <sys/socket.h>
+#include <sys/time.h>
+#include <fcntl.h>
+#include <string.h>
 
-#define THREAD_COUNT 4
-#define WWW_DIR "./www"
+static pthread_t *threads      = NULL;
+static int        num_threads  = 0;
+static int        shutdown_flag = 0;
 
-int shutdown_flag = 0; // Global shutdown flag
-
-static pthread_t threads[THREAD_COUNT];
 
 // Worker thread function
 static void *worker(void *arg)
@@ -82,7 +80,7 @@ static void *worker(void *arg)
 
             // Build full path
             char fullpath[512];
-            snprintf(fullpath, sizeof(fullpath), "%s%s", WWW_DIR, path);
+            snprintf(fullpath, sizeof(fullpath), "%s%s", SERVER_ROOT, path);
             // if (shutdown_flag)
             // {
             //     printf("[worker %ld] opening fd:\n", pthread_self());
@@ -158,12 +156,21 @@ static void *worker(void *arg)
     return NULL;
 }
 
-// Start THREAD_COUNT workers
-void threadpool_start()
-{
-    for (int i = 0; i < THREAD_COUNT; ++i)
-    {
-        pthread_create(&threads[i], NULL, worker, NULL);
+// Start N workers
+void threadpool_start(int n) {
+    if (n <= 0) n = 1;
+    num_threads = n;
+    threads = malloc(sizeof(pthread_t) * num_threads);
+    if (!threads) {
+        perror("malloc");
+        exit(EXIT_FAILURE);
+    }
+
+    for (int i = 0; i < num_threads; ++i) {
+        if (pthread_create(&threads[i], NULL, worker, NULL) != 0) {
+            perror("pthread_create");
+            exit(EXIT_FAILURE);
+        }
     }
 }
 
@@ -174,8 +181,12 @@ void threadpool_stop()
     printf("[pool] stopping, about to shutdown queue\n");
     queue_shutdown();
     printf("[pool] queue_shutdown done, now joining threads\n");
-    for (int i = 0; i < THREAD_COUNT; ++i)
+    for (int i = 0; i < num_threads; ++i)
     {
         pthread_join(threads[i], NULL);
     }
+
+    free(threads);
+    threads = NULL;
+    num_threads = 0;
 }
